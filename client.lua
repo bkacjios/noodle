@@ -235,6 +235,10 @@ end)
 twitch.command.alias("commands", "help")
 twitch.command.alias("commands", "?")
 
+twitch.command.add("about", function(user, cmd, args, raw)
+	user:message("/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle")
+end)
+
 local function main()
 	twitch.chat:think()
 end
