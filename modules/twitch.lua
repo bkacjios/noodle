@@ -73,7 +73,7 @@ function twitch.user:getChannelID()
 end
 
 function twitch.user:message(text, ...)
-	twitch.message(self.channel, text:gsub("%{name%}", "@" .. self["display-name"]), ...)
+	twitch.message(self.channel, text:gsub("%{name%}", self["display-name"]), ...)
 end
 
 function twitch.getUpTime(channel)

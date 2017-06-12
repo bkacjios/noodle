@@ -70,19 +70,20 @@ function twitch.user:getFlags(ignoreDonger)
 end
 
 function twitch.getBiggestDongers()
-	local stmt = db:prepare("SELECT MAX(size) FROM dongers")
 	local max_size
 	local users = {}
 
+	local stmt = db:prepare("SELECT MAX(size) FROM dongers WHERE updated + ? > cast(strftime('%s','now') as int)")
 	if not diderror(stmt, db) then
+		stmt:bind_values(minutes)
 		stmt:step()
 		max_size = stmt:get_value(0)
 		stmt:finalize()
 	end
 
-	local stmt = db:prepare("SELECT display_name FROM dongers WHERE size >= ?")
+	local stmt = db:prepare("SELECT display_name FROM dongers WHERE updated + ? > cast(strftime('%s','now') as int) AND size >= ?")
 	if not diderror(stmt, db) and max_size then
-		stmt:bind_values(max_size)
+		stmt:bind_values(minutes, max_size)
 
 		for display_name in stmt:urows() do
 			table.insert(users, display_name)
@@ -191,9 +192,11 @@ end)
 twitch.command.add("dongerking", function(user, cmd, args, raw)
 	local size, users = twitch.getBiggestDongers()
 
-	local list = table.concat(users, ", ")
+	local list = table.concatList(users)
 
-	if #users > 1 then
+	if not size then
+		user:message("There are currently no donger kings..")
+	elseif #users > 1 then
 		user:message("%s are the current donger kings with a %.1f inch dong", list, size)
 	else
 		user:message("%s is the current donger king with a %.1f inch dong", list, size)
