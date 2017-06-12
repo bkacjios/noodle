@@ -48,12 +48,8 @@ local function diderror(stmt, db)
 	return false
 end
 
-function twitch.user:getFlags(ignoreDonger)
+function twitch.user:getFlags()
 	local flags = 0
-
-	if not ignoreDonger then
-		flags = self:getDongerFlags()
-	end
 	if self:isSubscriber() then
 		flags = bit.bor(flags, FLAGS.IS_SUBSCRIBER)
 	end
@@ -106,18 +102,6 @@ function twitch.getDongerAverage()
 	return 0, 0
 end	
 
-function twitch.user:getDongerFlags()
-	local stmt = db:prepare("SELECT flags FROM dongers WHERE user_id = ? COLLATE NOCASE;")
-	if not diderror(stmt, db) then
-		stmt:bind_values(self:getID())
-		stmt:step()
-		local flags = stmt:get_uvalues()
-		stmt:finalize()
-		return flags
-	end
-	return 0
-end
-
 function twitch.user:registeredDonger()
 	local stmt = db:prepare("INSERT OR IGNORE INTO dongers (user_id, user_name, updated, size) VALUES (?, ?, ?, ?);")
 	if diderror(stmt, db) then return false end
@@ -125,16 +109,16 @@ function twitch.user:registeredDonger()
 	stmt:step()
 	stmt:finalize()
 
-	local stmt = db:prepare("UPDATE dongers SET display_name=?, flags=? WHERE user_id=?;")
+	local stmt = db:prepare("UPDATE dongers SET display_name=?, flags=flags|? WHERE user_id=?;")
 	if diderror(stmt, db) then return false end
-	stmt:bind_values(self:getName(), self:getFlags(true), self:getID())
+	stmt:bind_values(self:getName(), self:getFlags(), self:getID())
 	stmt:step()
 	stmt:finalize()
 	return true
 end
 
 function twitch.user:getDonger()
-	local stmt = db:prepare("SELECT size, updated, flags FROM dongers WHERE user_id = ? COLLATE NOCASE;")
+	local stmt = db:prepare("SELECT size, updated, flags FROM dongers WHERE user_id = ?;")
 	if not diderror(stmt, db) then
 		stmt:bind_values(self:getID())
 		stmt:step()
@@ -184,8 +168,13 @@ end
 
 twitch.command.add("donger", function(user, cmd, args, raw)
 	if user:registeredDonger() then
-		local size, units = user:getDongerSize()
-		user:message("{name} has %s %.1f %s donger", string.AOrAn(size), size, units)
+		local king_size, kings = twitch.getBiggestDongers()
+		local size, units, updated = user:getDongerSize()
+		if not king_size or size >= king_size then
+			user:message("/me {name} is a donger king with their %.1f %s donger", size, units)
+		else
+			user:message("{name} has %s %.1f %s donger", string.AOrAn(size), size, units)
+		end
 	end
 end)
 
@@ -195,13 +184,35 @@ twitch.command.add("dongerking", function(user, cmd, args, raw)
 	local list = table.concatList(users)
 
 	if not size then
-		user:message("There are currently no donger kings..")
+		user:message("/me There are currently no donger kings..")
 	elseif #users > 1 then
 		user:message("%s are the current donger kings with a %.1f inch dong", list, size)
 	else
 		user:message("%s is the current donger king with a %.1f inch dong", list, size)
 	end	
 end)
+
+twitch.command.add("centimeters", function(user, cmd, args, raw)
+	local stmt = db:prepare("UPDATE dongers SET flags=flags|? WHERE user_id=?;")
+	if diderror(stmt, db) then return false end
+	stmt:bind_values(FLAGS.WANTS_CENTIMETERS, user:getID())
+	stmt:step()
+	stmt:finalize()
+
+	user:message("{name} will now get their donger size in centimeters")
+end)
+twitch.command.alias("centimeters", "centimeter")
+
+twitch.command.add("inches", function(user, cmd, args, raw)
+	local stmt = db:prepare("UPDATE dongers SET flags=flags&~? WHERE user_id=?;")
+	if diderror(stmt, db) then return false end
+	stmt:bind_values(FLAGS.WANTS_CENTIMETERS, user:getID())
+	stmt:step()
+	stmt:finalize()
+
+	user:message("{name} will now get their donger size in inches")
+end)
+twitch.command.alias("inches", "inch")
 
 twitch.command.add("dongeraverage", function(user, cmd, args, raw)
 	local users, average = twitch.getDongerAverage()
