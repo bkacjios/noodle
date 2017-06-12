@@ -191,6 +191,7 @@ twitch.command.add("dongerking", function(user, cmd, args, raw)
 		user:message("%s is the current donger king with a %.1f inch dong", list, size)
 	end	
 end)
+twitch.command.alias("dongerking", "dongerkings")
 
 twitch.command.add("centimeters", function(user, cmd, args, raw)
 	local stmt = db:prepare("UPDATE dongers SET flags=flags|? WHERE user_id=?;")
@@ -218,6 +219,7 @@ twitch.command.add("dongeraverage", function(user, cmd, args, raw)
 	local users, average = twitch.getDongerAverage()
 	user:message("The average donger size of %d %s is %.1f inches", users, string.Plural("user", users), average)
 end)
+twitch.command.alias("dongeraverage", "dongeraverages")
 
 twitch.command.add("uptime", function(user, cmd, args, raw)
 	if twitch.cooldown(10) then return end
@@ -249,6 +251,17 @@ twitch.command.alias("commands", "?")
 twitch.command.add("about", function(user, cmd, args, raw)
 	user:message("/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle")
 end)
+
+twitch.command.add("following", function(user, cmd, args, raw)
+	local time = user:getFollowTime()
+
+	if time then
+		user:message("{name} has been following for %s", time)
+	else
+		user:message("{name} isn't following...")
+	end
+end)
+twitch.command.alias("following", "followage")
 
 local function main()
 	twitch.chat:think()

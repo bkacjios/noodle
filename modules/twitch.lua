@@ -14,10 +14,11 @@ local twitch = {
 		nick = "dongerai",
 		track_users = false,
 	},
+	chatters = {},
 	users = {},
 	user = {},
 	cool = os.time(),
-	command = require("command")
+	command = require("command"),
 }
 
 function twitch.cooldown(secs)
@@ -76,10 +77,34 @@ function twitch.user:message(text, ...)
 	twitch.message(self.channel, text:gsub("%{name%}", self["display-name"]), ...)
 end
 
-function twitch.getUpTime(channel)
+function twitch.user:getFollowTime(channel)
+	local username = self:getUserName()
+	local channel = channel or self:getChannel()
+
+	local gmt = os.date("!*t")
+	local now = os.time(gmt)
+	local start = self.follow_cache[channel]
+
+	if not start then
+		local r, c = twitch.https("https://api.twitch.tv/kraken/users/%s/follows/channels/%s", username, channel)
+		if c ~= 200 then return end
+
+		local data = json.decode(r)
+
+		if data.created_at then
+			local year, month, day, hour, min, sec = data.created_at:match("(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)Z")
+			start = os.time({year=year, month=month, day=day, hour=hour, min=min, sec=sec, isdst=gmt.isdst})
+			self.follow_cache[channel] = start
+		end
+	end
+
+	return math.SecondsToHuman(now - start)
+end
+
+function twitch.https(url, ...)
 	local t = {}
 	local r, c, h = https.request({
-		url = ("https://api.twitch.tv/kraken/streams/%s"):format(channel),
+		url = url:format(...),
 		sink = ltn12.sink.table(t),
 		headers = {
 			["Client-ID"] = "p59zoqvt4joe9gqzqbs5cycbhc3nr6",
@@ -87,7 +112,11 @@ function twitch.getUpTime(channel)
 	})
 
 	r = table.concat(t, "")
-	
+	return r, c, h
+end
+
+function twitch.getUpTime(channel)
+	local r, c = twitch.https("https://api.twitch.tv/kraken/streams/%s", channel)
 	if c ~= 200 then return end
 
 	local data = json.decode(r)
@@ -102,13 +131,13 @@ function twitch.getUpTime(channel)
 end
 
 function twitch.getUsersInChat(channel)
-	local result, code = http.request(("http://tmi.twitch.tv/group/user/%s/chatters"):format(channel))
+	local r, c = http.request(("http://tmi.twitch.tv/group/user/%s/chatters"):format(channel))
 
 	local chatters = {}
 
-	if not result or code ~= 200 then return chatters end
+	if not r or c ~= 200 then return chatters end
 
-	local data = json.decode(result)
+	local data = json.decode(r)
 
 	for _,group in pairs(data.chatters) do
 		for _, name in pairs(group) do
@@ -138,21 +167,21 @@ end
 function twitch.join(channel)
 	twitch.chat:join("#" .. channel)
 	twitch.chat:send(("PRIVMSG %s :.color red"):format(channel))
-	twitch.users["#" .. channel] = twitch.getUsersInChat(channel)
+	twitch.chatters["#" .. channel] = twitch.getUsersInChat(channel)
 	log.info("Joined channel %s", channel)
 end
 
 twitch.chat:hook("OnJoin", function(user, channel)
-	if not twitch.users[channel][user.username] then
-		log.info("[%s] %s joined", channel, user.username)
-		twitch.users[channel][user.username] = true
+	if not twitch.chatters[channel][user.username] then
+		--log.info("[%s] %s joined", channel, user.username)
+		twitch.chatters[channel][user.username] = true
 	end
 end)
 
 twitch.chat:hook("OnPart", function(user, channel)
-	if twitch.users[channel][user.username] then
-		log.info("[%s] %s left", channel, user.username)
-		twitch.users[channel][user.username] = nil
+	if twitch.chatters[channel][user.username] then
+		--log.info("[%s] %s left", channel, user.username)
+		twitch.chatters[channel][user.username] = nil
 	end
 end)
 
@@ -162,12 +191,17 @@ twitch.chat:hook("OnRaw", function(raw)
 	if tags and channel and message then
 		local username = hostmask:match("([^!]+)")
 
-		local user = setmetatable({
+		twitch.users[channel] = twitch.users[channel] or {}
+
+		local user = twitch.users[channel][username] or setmetatable({
 			channel = channel,
 			["user-name"] = username,
 			["display-name"] = username:firstToUpper(),
 			["broadcaster"] = username == channel,
+			follow_cache = {},
 		}, twitch.user)
+
+		twitch.users[channel][username] = user
 
 		for key, value in string.gmatch(tags, ";([^=]+)=([^;]+)") do
 			if key == "subscriber" or key == "mod" or key == "turbo" then
