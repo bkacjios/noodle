@@ -29,7 +29,7 @@ db:exec([[CREATE TABLE IF NOT EXISTS dongers (
 	display_name TEXT,
 	updated INTEGER,
 	size REAL,
-	flags INTEGER
+	flags INTEGER DEFAULT 0
 );]])
 
 local FLAGS = {
@@ -131,8 +131,6 @@ end
 function twitch.user:getDongerSize()
 	local size, updated, flags = self:getDonger()
 
-	local centimeters = bit.band(flags, FLAGS.WANTS_CENTIMETERS) > 0
-
 	if updated + minutes < os.time() then
 		size, updated = self:randomDongerSize(), os.time()
 
@@ -143,11 +141,7 @@ function twitch.user:getDongerSize()
 		stmt:finalize()
 	end
 
-	if centimeters then
-		return size * 2.54, "centimeter"
-	else
-		return size, "inch"
-	end
+	return size, updated, flags
 end
 
 function twitch.user:randomDongerSize()
@@ -169,11 +163,22 @@ end
 twitch.command.add("donger", function(user, cmd, args, raw)
 	if user:registeredDonger() then
 		local king_size, kings = twitch.getBiggestDongers()
-		local size, units, updated = user:getDongerSize()
+		local size, updated, flags = user:getDongerSize()
+
+		local centimeters = bit.band(flags, FLAGS.WANTS_CENTIMETERS) > 0
+
+		local units = "inch"
+		local print_size = size
+
+		if centimeters then
+			units = "centimeter"
+			print_size = size * 2.54
+		end
+
 		if not king_size or size >= king_size then
-			user:message("/me {name} is a donger king with their %.1f %s donger", size, units)
+			user:message("/me {name} is a donger king with their %.1f %s donger", print_size, units)
 		else
-			user:message("{name} has %s %.1f %s donger", string.AOrAn(size), size, units)
+			user:message("{name} has %s %.1f %s donger", string.AOrAn(size), print_size, units)
 		end
 	end
 end)
@@ -243,7 +248,7 @@ twitch.command.add("commands", function(user, cmd, args, raw)
 		end
 	end
 
-	user:message("/me The commands available to dongerbot are: %s", table.concat(cmds, ", "))
+	user:message("/me The commands available to dongerbot are: %s", table.concatList(cmds))
 end)
 twitch.command.alias("commands", "help")
 twitch.command.alias("commands", "?")
