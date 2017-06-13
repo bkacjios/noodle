@@ -7,6 +7,7 @@ local twitch = require("twitch")
 local terminal = require("terminal")
 local sqlite = require("lsqlite3")
 local db = sqlite.open("twitch.db")
+local lua = require("lua")
 
 local channels = {
 	"super_noodle",
@@ -182,6 +183,7 @@ twitch.command.add("donger", function(user, cmd, args, raw)
 		end
 	end
 end)
+twitch.command.alias("donger", "dong")
 
 twitch.command.add("dongerking", function(user, cmd, args, raw)
 	local size, users = twitch.getBiggestDongers()
@@ -254,7 +256,7 @@ twitch.command.alias("commands", "help")
 twitch.command.alias("commands", "?")
 
 twitch.command.add("about", function(user, cmd, args, raw)
-	user:message("/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle")
+	user:message("/me is open source! Check out the code here: https://github.com/bkacjios/noodle")
 end)
 
 twitch.command.add("following", function(user, cmd, args, raw)
@@ -268,8 +270,48 @@ twitch.command.add("following", function(user, cmd, args, raw)
 end)
 twitch.command.alias("following", "followage")
 
+local allowed_lua = {
+	["aiarena"] = true,
+	["bkacjios"] = true,
+	["super_noodle"] = true,
+}
+
+twitch.command.add("lua", function(user, cmd, args, raw)
+	if allowed_lua[user:getUserName()] then
+		lua.run(user, raw:sub(6))
+	end
+end)
+
+local adverts = {
+	"/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle",
+	"/me "
+}
+
+local next_advert = os.time() + 10 * 60
+local advert = 1
+
 local function main()
 	twitch.chat:think()
+
+	if next_advert <= os.time() then
+		for id, channel in pairs(channels) do
+			if advert == 1 then
+				twitch.message(channel, "/me is open source! Check out the code here: https://github.com/bkacjios/noodle")
+			elseif advert == 2 then
+				local time = twitch.getUpTime(channel)
+				if time then
+					twitch.message(channel, "/me {host} has been streaming for %s", time)
+				end
+			end
+		end
+
+		next_advert = os.time() + 30 * 60
+		advert = advert + 1
+
+		if advert > 2 then
+			advert = 1
+		end
+	end
 end
 
 terminal.new(main, input)
