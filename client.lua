@@ -92,9 +92,17 @@ function twitch.getBiggestDongers()
 	return max_size, users
 end
 
-function twitch.getDongerAverage()
-	local stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM dongers")
+function twitch.getDongerAverage(flag)
+	local stmt
+	if flag then
+		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM dongers WHERE flags&? > 0")
+	else
+		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM dongers")
+	end
 	if not diderror(stmt, db) then
+		if flag then
+			stmt:bind_values(flag)
+		end
 		stmt:step()
 		local users, average = stmt:get_uvalues()
 		stmt:finalize()
@@ -199,6 +207,8 @@ twitch.command.add("dongerking", function(user, cmd, args, raw)
 	end	
 end)
 twitch.command.alias("dongerking", "dongerkings")
+twitch.command.alias("dongerking", "kingdonger")
+twitch.command.alias("dongerking", "kingdong")
 
 twitch.command.add("centimeters", function(user, cmd, args, raw)
 	local stmt = db:prepare("UPDATE dongers SET flags=flags|? WHERE user_id=?;")
