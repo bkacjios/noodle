@@ -84,7 +84,7 @@ local env = {
 env._G = env
 env.__newindex = env
 
-local function sandbox(user, func)
+local function sandbox(user, func, buffer)
 	local getPlayer = function(name)
 		for username,user in pairs(twitch.users[user.channel]) do
 			if user:getName() == name or user:getUserName() == name then
@@ -101,9 +101,9 @@ local function sandbox(user, func)
 		print = function(...)
 			local txts = {}
 			for k,v in pairs({...}) do
-				table.insert(txts, tostring(v))
+				table.insert(txts, v == nil and "nil" or tostring(v))
 			end
-			user:message(table.concat(txts, ", "))
+			table.insert(buffer, table.concat(txts, ", "))
 		end,
 		me = user,
 		twitch = twitch,
@@ -119,9 +119,10 @@ function lua.run(user, str)
 	
 	if not lua then
 		log.warn("%s compile error: (%s)", user, err)
-		user:message("compile error: %s", err:escapeHTML())
+		user:message("/me compile error: %s", err)
 	else
-		sandbox(user, lua)
+		local buffer = {}
+		sandbox(user, lua, buffer)
 
 		local quota = 50000
 
@@ -135,9 +136,13 @@ function lua.run(user, str)
 		local status, err = pcall(lua)
 		if not status then
 			log.warn("%s runtime error: (%s)", user, err)
-			user:message("runtime error: %s", err:escapeHTML())
+			user:message("/me runtime error: %s", err)
 		elseif err then
 			user:message(tostring(err))
+		end
+
+		if #buffer > 0 then
+			user:message(table.concat(buffer, "    "):ellipse(512))
 		end
 
 		debug.sethook()

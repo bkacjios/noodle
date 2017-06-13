@@ -92,6 +92,32 @@ function twitch.getBiggestDongers()
 	return max_size, users
 end
 
+function twitch.getSmallestDongers()
+	local max_size
+	local users = {}
+
+	local stmt = db:prepare("SELECT MIN(size) FROM dongers WHERE updated + ? > cast(strftime('%s','now') as int)")
+	if not diderror(stmt, db) then
+		stmt:bind_values(minutes)
+		stmt:step()
+		max_size = stmt:get_value(0)
+		stmt:finalize()
+	end
+
+	local stmt = db:prepare("SELECT display_name FROM dongers WHERE updated + ? > cast(strftime('%s','now') as int) AND size <= ?")
+	if not diderror(stmt, db) and max_size then
+		stmt:bind_values(minutes, max_size)
+
+		for display_name in stmt:urows() do
+			table.insert(users, display_name)
+		end
+
+		stmt:finalize()
+	end
+
+	return max_size, users
+end
+
 function twitch.getDongerAverage(flag)
 	local stmt
 	if flag then
@@ -166,7 +192,7 @@ function twitch.user:randomDongerSize()
 		average = 5.5
 	end
 
-	return math.randombias(1, average, 6)
+	return math.round(math.randombias(1, 16, average), 1)
 end
 
 twitch.command.add("donger", function(user, cmd, args, raw)
@@ -185,9 +211,17 @@ twitch.command.add("donger", function(user, cmd, args, raw)
 		end
 
 		if not king_size or size >= king_size then
-			user:message("/me {name} is a donger king with their %.1f %s donger", print_size, units)
+			if centimeters then
+				user:message("/me {name} is a donger king with their %.1f %s donger, which is %.1f inches in MURRICA", print_size, units, size)
+			else
+				user:message("/me {name} is a donger king with their %.1f %s donger", print_size, units)
+			end
 		else
-			user:message("{name} has %s %.1f %s donger", string.AOrAn(size), print_size, units)
+			if centimeters then
+				user:message("{name} has %s %.1f %s donger, which is %.1f inches in MURRICA", string.AOrAn(print_size), print_size, units, size)
+			else
+				user:message("{name} has %s %.1f %s donger", string.AOrAn(print_size), print_size, units)
+			end
 		end
 	end
 end)
@@ -209,6 +243,27 @@ end)
 twitch.command.alias("dongerking", "dongerkings")
 twitch.command.alias("dongerking", "kingdonger")
 twitch.command.alias("dongerking", "kingdong")
+twitch.command.alias("dongerking", "biggestdonger")
+twitch.command.alias("dongerking", "biggestdongers")
+
+twitch.command.add("dongerpleb", function(user, cmd, args, raw)
+	local size, users = twitch.getSmallestDongers()
+
+	local list = table.concatList(users)
+
+	if not size then
+		user:message("/me There are currently no donger plebs..")
+	elseif #users > 1 then
+		user:message("%s are the current donger plebs with a %.1f inch dong", list, size)
+	else
+		user:message("%s is the current donger pleb with a %.1f inch dong", list, size)
+	end	
+end)
+twitch.command.alias("dongerpleb", "dongerplebs")
+twitch.command.alias("dongerpleb", "plebdonger")
+twitch.command.alias("dongerpleb", "plebdong")
+twitch.command.alias("dongerpleb", "smallestdonger")
+twitch.command.alias("dongerpleb", "smallestdongers")
 
 twitch.command.add("centimeters", function(user, cmd, args, raw)
 	local stmt = db:prepare("UPDATE dongers SET flags=flags|? WHERE user_id=?;")
@@ -232,11 +287,31 @@ twitch.command.add("inches", function(user, cmd, args, raw)
 end)
 twitch.command.alias("inches", "inch")
 
+local rank_translation = {
+	["mod"] = FLAGS.IS_MODERATOR,
+	["moderator"] = FLAGS.IS_MODERATOR,
+	["sub"] = FLAGS.IS_SUBSCRIBER,
+	["subsciber"] = FLAGS.IS_SUBSCRIBER,
+}
+
 twitch.command.add("dongeraverage", function(user, cmd, args, raw)
-	local users, average = twitch.getDongerAverage()
-	user:message("The average donger size of %d %s is %.1f inches", users, string.Plural("user", users), average)
+	local rank = args[1]
+	if rank and rank_translation[rank:lower()] then
+		rank = rank:lower()
+	else
+		rank = "user"
+	end
+
+	local flag = rank_translation[rank]
+
+	local users, average = twitch.getDongerAverage(flag)
+	user:message("The average donger size of %d %s is %.1f inches", users, string.Plural(rank, users), average)
 end)
 twitch.command.alias("dongeraverage", "dongeraverages")
+twitch.command.alias("dongeraverage", "averagedonger")
+twitch.command.alias("dongeraverage", "averagedongers")
+twitch.command.alias("dongeraverage", "dongaverage")
+twitch.command.alias("dongeraverage", "dongaverages")
 
 twitch.command.add("uptime", function(user, cmd, args, raw)
 	if twitch.cooldown(10) then return end
@@ -255,7 +330,7 @@ twitch.command.add("commands", function(user, cmd, args, raw)
 	local cmds = {}
 
 	for name, cmd in pairs(twitch.command.commands) do
-		if not cmd.alias then
+		if not cmd.alias and cmd.name ~= "lua" then
 			table.insert(cmds, "!" .. name)
 		end
 	end
@@ -289,37 +364,45 @@ local allowed_lua = {
 twitch.command.add("lua", function(user, cmd, args, raw)
 	if allowed_lua[user:getUserName()] then
 		lua.run(user, raw:sub(6))
+	else
+		user:message("{name} is a pleb")
 	end
 end)
 
 local adverts = {
-	"/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle",
-	"/me "
+	["super_noodle"] = {
+		"/me DongerAI is open source! Check out the code here: https://github.com/bkacjios/noodle",
+		"/me Check out the Stream group nub: http://steamcommunity.com/groups/SuperNoodleGroup",
+		"/me Check out the Discord nub: https://discord.gg/6GzcwWH",
+		"/me {host} has been streaming for %s",
+	},
 }
 
-local next_advert = os.time() + 10 * 60
+local current_advert = {}
+
+local next_advert = os.time() + 15 * 60
 local advert = 1
 
 local function main()
 	twitch.chat:think()
 
 	if next_advert <= os.time() then
+		next_advert = os.time() + 15 * 60
+
 		for id, channel in pairs(channels) do
-			if advert == 1 then
-				twitch.message(channel, "/me is open source! Check out the code here: https://github.com/bkacjios/noodle")
-			elseif advert == 2 then
-				local time = twitch.getUpTime(channel)
-				if time then
-					twitch.message(channel, "/me {host} has been streaming for %s", time)
+			current_advert[channel] = current_advert[channel] and current_advert[channel] + 1 or 1
+
+			local time = twitch.getUpTime(channel)
+
+			if time then
+				local message = adverts[channel][current_advert[channel]]
+
+				twitch.message(channel, message, time)
+
+				if current_advert[channel] >= #adverts[channel] then
+					current_advert[channel] = 0
 				end
 			end
-		end
-
-		next_advert = os.time() + 30 * 60
-		advert = advert + 1
-
-		if advert > 2 then
-			advert = 1
 		end
 	end
 end
