@@ -166,7 +166,7 @@ end
 function twitch.user:getDongerSize()
 	local size, updated, flags = self:getDonger()
 
-	if updated + minutes < os.time() then
+	if updated + minutes < os.time() or size < 1 then
 		size, updated = self:randomDongerSize(), os.time()
 
 		local stmt = db:prepare("UPDATE dongers SET size=?, updated=? WHERE user_id=?;")
@@ -180,19 +180,25 @@ function twitch.user:getDongerSize()
 end
 
 function twitch.user:randomDongerSize()
-	local average = 6
+	local average = 5
 
 	if self:isBroadcaster() then
-		average = 9
-	elseif self:isMod() then
-		average = 7.5
-	elseif self:isSubscriber() then
-		average = 6
-	elseif self:isPrime() then
-		average = 5.5
+		average = average + 2
+	end
+	if self:isMod() then
+		average = average + self:getModLevel() * 1
+	end
+	if self:isPartner() then
+		average = average + self:getPartnerLevel() * 0.5
+	end
+	if self:isSubscriber() then
+		average = average + self:getSubscriberLevel() * 0.5
+	end
+	if self:isPrime() then
+		average = average + self:getPrimeLevel() * 0.25
 	end
 
-	return math.round(math.randombias(1, 16, average), 1)
+	return math.round(math.randombias(1, 24, average), 1)
 end
 
 twitch.command.add("donger", function(user, cmd, args, raw)
@@ -243,6 +249,7 @@ end)
 twitch.command.alias("dongerking", "dongerkings")
 twitch.command.alias("dongerking", "kingdonger")
 twitch.command.alias("dongerking", "kingdong")
+twitch.command.alias("dongerking", "biggestdong")
 twitch.command.alias("dongerking", "biggestdonger")
 twitch.command.alias("dongerking", "biggestdongers")
 
@@ -262,6 +269,7 @@ end)
 twitch.command.alias("dongerpleb", "dongerplebs")
 twitch.command.alias("dongerpleb", "plebdonger")
 twitch.command.alias("dongerpleb", "plebdong")
+twitch.command.alias("dongerpleb", "smallestdong")
 twitch.command.alias("dongerpleb", "smallestdonger")
 twitch.command.alias("dongerpleb", "smallestdongers")
 
@@ -348,9 +356,9 @@ twitch.command.add("following", function(user, cmd, args, raw)
 	local time = user:getFollowTime()
 
 	if time then
-		user:message("{name} has been following for %s", time)
+		user:message("{name} has been following {host} for %s", time)
 	else
-		user:message("{name} isn't following...")
+		user:message("{name} isn't following {host}...")
 	end
 end)
 twitch.command.alias("following", "followage")
@@ -364,8 +372,6 @@ local allowed_lua = {
 twitch.command.add("lua", function(user, cmd, args, raw)
 	if allowed_lua[user:getUserName()] then
 		lua.run(user, raw:sub(6))
-	else
-		user:message("{name} is a pleb")
 	end
 end)
 

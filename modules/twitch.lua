@@ -53,12 +53,36 @@ function twitch.user:isMod()
 	return self.mod
 end
 
+function twitch.user:getModLevel()
+	return self.badges["moderator"] or 0
+end
+
+function twitch.user:isTurbo()
+	return self.turbo
+end
+
 function twitch.user:isSubscriber()
 	return self.subscriber
 end
 
+function twitch.user:getSubscriberLevel()
+	return self.badges["subscriber"] or 0
+end
+
 function twitch.user:isPrime()
-	return self.turbo
+	return self.badges["premium"] and self.badges["premium"] > 0
+end
+
+function twitch.user:getPrimeLevel()
+	return self.badges["premium"] or 0
+end
+
+function twitch.user:isPartner()
+	return self.badges["partner"] and self.badges["partner"] > 0
+end
+
+function twitch.user:getPartnerLevel()
+	return self.badges["partner"] or 0
 end
 
 function twitch.user:isBroadcaster()
@@ -203,8 +227,14 @@ twitch.chat:hook("OnRaw", function(raw)
 
 		twitch.users[channel][username] = user
 
-		for key, value in string.gmatch(tags, ";([^=]+)=([^;]+)") do
-			if key == "subscriber" or key == "mod" or key == "turbo" then
+		user["badges"] = user["badges"] or {}
+
+		for key, value in string.gmatch(tags, ";?([^=]+)=([^;]+)") do
+			if key == "badges" then
+				for key, value in string.gmatch(value, "([^/]+)/([^,]+),?") do
+					user["badges"][key] = tonumber(value)
+				end
+			elseif key == "subscriber" or key == "mod" or key == "turbo" then
 				user[key] = value == "1"
 			else
 				user[key] = value
