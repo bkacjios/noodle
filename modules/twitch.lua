@@ -73,6 +73,10 @@ function twitch.user:getSubscriberLevel()
 	return self.badges["subscriber"] or 0
 end
 
+function twitch.user:isAdmin()
+	return self.badges["admin"] and self.badges["admin"] > 0
+end
+
 function twitch.user:isStaff()
 	return self.badges["staff"] and self.badges["staff"] > 0
 end
@@ -103,6 +107,10 @@ end
 
 function twitch.user:isBroadcaster()
 	return self.badges["broadcaster"] and self.badges["broadcaster"] > 0
+end
+
+function twitch.user:isBanable()
+	return not self:isStaff() and not self:isGlobalMod() and not self:isAdmin() and not self:isMod()
 end
 
 function twitch.user:getChannel()

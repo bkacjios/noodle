@@ -44,6 +44,7 @@ db:exec([[CREATE TABLE IF NOT EXISTS channels (
 	size_min INTEGER DEFAULT 1,
 	size_max INTEGER DEFAULT 24,
 	size_average INTEGER DEFAULT 4,
+	size_round_places INTEGER DEFAULT 1,
 	size_bonus_broadcaster INTEGER DEFAULT 8,
 	size_bonus_staff INTEGER DEFAULT 5,
 	size_bonus_mod INTEGER DEFAULT 4,
@@ -76,13 +77,14 @@ db:exec([[CREATE TABLE IF NOT EXISTS sizes (
 	user_id INTEGER NOT NULL,
 	room_id INTEGER NOT NULL,
 	updated INTEGER DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	size REAL DEFAULT 0 NOT NULL,
-	flags INTEGER DEFAULT 0
+	size REAL DEFAULT,
+	flags INTEGER DEFAULT 0,
+	UNIQUE (user_id, room_id)
 );]])
 
 local function diderror(stmt, db)
 	if not stmt then
-		log.error("sqlite error: %s", db:errmsg())
+		log.error(debug.traceback(string.format("sqlite error: %s", db:errmsg())))
 		return true
 	end
 	return false
@@ -206,7 +208,7 @@ end
 function twitch.getSmallestSize(room_id)
 	local min_size
 
-	local stmt = db:prepare("SELECT MIN(size) FROM sizes WHERE cast(strftime('%s',updated) + ? > cast(strftime('%s','now') AS INT) AND room_id = ?;")
+	local stmt = db:prepare("SELECT MIN(size) FROM sizes WHERE cast(strftime('%s',updated) AS INT) + ? > cast(strftime('%s','now') AS INT) AND room_id = ?;")
 	if not diderror(stmt, db) then
 		stmt:bind_values(CHANNEL_CONFIGS[room_id]["size_cooldown"], room_id)
 		stmt:step()
@@ -348,7 +350,7 @@ function twitch.user:randomSize()
 		average = average + self:getPrimeLevel() * config["size_bonus_prime"]
 	end
 
-	return math.round(math.randombias(config["size_min"], config["size_max"], average, 0.5), 1)
+	return math.round(math.randombias(config["size_min"], config["size_max"], average, 0.5), config["size_round_places"])
 end
 
 concommand.Add("say", function(cmd, args, raw)
@@ -412,7 +414,7 @@ twitch.command.add("advert", function(user, cmd, args, raw)
 		stmt:step()
 		stmt:finalize()
 
-		if CHANNEL_ADVERTS[room_id] then
+		if CHANNEL_ADVERTS[room_id][hash] then
 			CHANNEL_ADVERTS[room_id][hash] = nil
 			user:message("Successfully removed advert")
 		else
@@ -443,9 +445,7 @@ twitch.command.add("donger", function(user, cmd, args, raw)
 			user:message(CHANNEL_CONFIGS[user["room-id"]]["size_format"]:gsub("%{size%-length%}", size))
 		end
 
-		print(size, CHANNEL_CONFIGS[user["room-id"]]["size_ban_min"])
-
-		if size <= CHANNEL_CONFIGS[user["room-id"]]["size_ban_min"] then
+		if not user:isBanable() and size <= CHANNEL_CONFIGS[user["room-id"]]["size_ban_min"] then
 			user:message(CHANNEL_CONFIGS[user["room-id"]]["size_format_ban"]:gsub("%{size%-length%}", size))
 			user:message("/timeout {username} {size-ban-length}")
 		end
@@ -458,7 +458,7 @@ twitch.command.add("king", function(user, cmd, args, raw)
 	local list = table.concatList(users)
 
 	if not size then
-		user:message("There are currently no {size-name} {size-king}..")
+		user:message("There is currently no {size-name} {size-king}..")
 	elseif #users > 1 then
 		user:message("%s are the current {size-name} {size-king} with a %.1f {size-units} {size-name}", list, size)
 	else
@@ -472,7 +472,7 @@ twitch.command.add("pleb", function(user, cmd, args, raw)
 	local list = table.concatList(users)
 
 	if not size then
-		user:message("There are currently no {size-name} {size-name} {size-pleb}..")
+		user:message("There is currently no {size-name} {size-pleb}..")
 	elseif #users > 1 then
 		user:message("%s are the current {size-name} {size-pleb} with a %.1f inch {size-name}", list, size)
 	else
