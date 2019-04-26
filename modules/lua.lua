@@ -113,7 +113,7 @@ local function sandbox(user, func, buffer)
 end
 
 function lua.run(user, str)
-	local lua, err = loadstring(str)
+	local lua, err = loadstring(str, user:getName())
 
 	log.debug("%s ran: %s", user, str)
 	
@@ -124,7 +124,7 @@ function lua.run(user, str)
 		local buffer = {}
 		sandbox(user, lua, buffer)
 
-		local quota = 50000
+		local quota = 5000
 
 		local timeout = function()
 			error("instructions exceeded", 2)
@@ -134,15 +134,16 @@ function lua.run(user, str)
 		debug.sethook(timeout, "", quota)
 
 		local status, err = pcall(lua)
+
+		if #buffer > 0 then
+			user:message(table.concat(buffer, "    "):ellipse(512))
+		end
+
 		if not status then
 			log.warn("%s runtime error: (%s)", user, err)
 			user:message("/me runtime error: %s", err)
 		elseif err then
 			user:message(tostring(err))
-		end
-
-		if #buffer > 0 then
-			user:message(table.concat(buffer, "    "):ellipse(512))
 		end
 
 		debug.sethook()

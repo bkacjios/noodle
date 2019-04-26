@@ -17,10 +17,10 @@ function terminal.new(main, input)
 	local sig = ev.Signal.new(exit, ev.SIGINT)
 	sig:start(loop)
 
-	--[[local evt = ev.IO.new(function()
+	local evt = ev.IO.new(function()
 		xpcall(input, error)
 	end, 0, ev.READ)
-	evt:start(loop)]]
+	evt:start(loop)
 
 	local timer = ev.Timer.new(function()
 		xpcall(main, error)

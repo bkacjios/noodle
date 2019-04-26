@@ -34,7 +34,7 @@ function command.poll(user, message)
 				return false, ("%s is currently broken.."):format(cmd)
 			end
 		else
-			log.info("%s: %s (Unknown Command)", user["display-name"], message)
+			--log.info("%s: %s (Unknown Command)", user["display-name"], message)
 			return false, ("Unknown command: %s"):format(cmd)
 		end
 	end

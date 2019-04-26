@@ -85,16 +85,50 @@ function table.print( t, indent, done )
 	io.stdout:flush()
 end
 
-function table.concatList(table, oxford)
+function table.concatNumberedList(table, sep, oxford)
+	if type(table) ~= "table" then
+		return tostring(table)
+	end
+
 	local str = ""
 	local num = #table
 	for i=1,num do
 		if i < num then
+			-- If we aren't at the end of the list, use commas
+			-- If we're one before the end of the list, use an oxford comma if we want it
+			str = str .. i .. ". " .. table[i] .. ((oxford or i < num - 1) and ", " or " ")
+		elseif i > 1 then
+			-- If we're the last item and we have more than 1 item already..
+			-- Seperate using our defined seperator word
+			str = str .. (sep or "and") .. " " .. i .. ". " .. table[i]
+		else
+			-- Single item..
+			str = i .. ". " .. table[i]
+		end
+	end
+	return str
+end
+
+function table.concatList(table, sep, oxford)
+	if type(table) ~= "table" then
+		return tostring(table)
+	end
+
+	local str = ""
+	local num = #table
+	for i=1,num do
+		if i < num then
+			-- If we aren't at the end of the list, use commas
+			-- If we're one before the end of the list, use an oxford comma if we want it
 			str = str .. table[i] .. ((oxford or i < num - 1) and ", " or " ")
 		elseif i > 1 then
-			str = str .. "and " .. table[i]
+			-- If we're the last item and we have more than 1 item already..
+			-- Seperate using our defined seperator word
+			str = str .. (sep or "and") .. " " .. table[i]
 		else
-			str = str .. table[i]
+			-- Single item..
+			-- Don't even bother concating the string
+			str = table[i]
 		end
 	end
 	return str
