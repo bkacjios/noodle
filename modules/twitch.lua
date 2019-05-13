@@ -3,7 +3,7 @@ local irc = require("irc")
 local ltn12 = require( "ltn12" )
 local http = require("socket.http")
 local https = require("ssl.https")
-local json = require("dkjson")
+local json = require("json")
 local log = require("log")
 
 require("extensions.string")
@@ -277,7 +277,9 @@ function twitch.setHooks()
 			user[key] = tonumber(value) or value
 		end
 
-		if user["badges"] then
+		user["badges"] = user["badges"] or ""
+
+		if type(user["badges"]) == "string" then
 			local badges = user["badges"]
 			user["badges"] = {}
 			for badge, version in string.gmatch(badges, ",?([^/]+)/([^,]+)") do
@@ -314,7 +316,11 @@ function twitch.setHooks()
 
 			twitch.command.poll(user, message)
 		elseif mode == "WHISPER" then
-
+			if message:lower() == "!join" then
+				
+			else
+				
+			end
 		end
 	end)
 end
@@ -328,7 +334,8 @@ function twitch.message(channel, text, ...)
 	text = text:gsub("%{host%}", channel)
 
 	if string.find(text, "{uptime}", 1, true) then
-		text = text:gsub("%{uptime%}", twitch.getUpTime(channel))
+		local uptime = twitch.getUpTime(channel)
+		text = text:gsub("%{uptime%}", uptime or "OFFLINE")
 	end
 
 	twitch.chat:sendChat("#" .. channel, text)

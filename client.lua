@@ -1,6 +1,8 @@
 local lfs = require("lfs")
 
---lfs.chdir(arg[0]:match("^(.*[/\\])[^/\\]-$"))
+if arg[0] then
+	lfs.chdir(arg[0]:match("^(.*[/\\])[^/\\]-$"))
+end
 
 package.path = package.path .. ';./modules/?.lua;./modules/?/init.lua'
 
@@ -90,8 +92,11 @@ local function diderror(stmt, db)
 	return false
 end
 
+function twitch.joinChannel(channel)
+	twitch.join(channel)
+end
+
 function twitch.start()
-	twitch.connect("oauth:huehuehuehuehuehuehue")
 
 	local stmt = db:prepare("SELECT * FROM channels WHERE settings&? > 0")
 	if not diderror(stmt, db) then
@@ -102,9 +107,13 @@ function twitch.start()
 
 			twitch.join(row["channel"])
 
-			local seconds = math.random(1, row["advert_cooldown"])
+			ADVERT_TIMERS[room_id] = os.time() + math.random(1, row["advert_cooldown"])
 
-			ADVERT_TIMERS[room_id] = os.time() + seconds
+			-- Custom donger command, woaw
+			twitch.command.channelAlias(room_id, "king", row["size_king"])
+			twitch.command.channelAlias(room_id, "pleb", row["size_pleb"])
+			twitch.command.channelAlias(room_id, "size", row["size_name"])
+			twitch.command.channelAlias(room_id, "sizes", row["size_name"] .. "s")
 
 			for key, value in pairs(row) do
 				CHANNEL_CONFIGS[room_id] = CHANNEL_CONFIGS[room_id] or {}
@@ -124,8 +133,6 @@ function twitch.start()
 	end
 end
 
-twitch.start()
-
 local FLAGS = {
 	NONE = 0,
 	IS_BROADCASTER = 1,
@@ -134,6 +141,7 @@ local FLAGS = {
 	IS_SUBSCRIBER = 8,
 	IS_MODERATOR = 16,
 	IS_ADMIN = 32,
+	IS_STAFF = 64,
 }
 
 function twitch.getChannelSetting(room_id, setting)
@@ -263,16 +271,18 @@ function twitch.getPlebs(room_id)
 	return min_size, users
 end
 
-function twitch.getAverageSizes(flag)
+function twitch.getAverageSizes(room_id, flag)
 	local stmt
 	if flag then
-		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM sizes WHERE flags&? > 0;")
+		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM sizes WHERE flags&? > 0 AND room_id = ?;")
 	else
-		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM sizes;")
+		stmt = db:prepare("SELECT COUNT(user_id), AVG(size) FROM sizes WHERE room_id = ?;")
 	end
 	if not diderror(stmt, db) then
 		if flag then
-			stmt:bind_values(flag)
+			stmt:bind_values(flag, room_id)
+		else
+			stmt:bind_values(room_id)
 		end
 		stmt:step()
 		local users, average = stmt:get_uvalues()
@@ -304,32 +314,34 @@ function twitch.user:getSize()
 	stmt:step()
 	stmt:finalize()
 
-	local stmt = db:prepare("SELECT size, cast(strftime('%s', updated) AS INT) AS updated, flags FROM sizes WHERE user_id = ? AND room_id = ?;")
+	local stmt = db:prepare("SELECT size, cast(strftime('%s', updated) AS INT) AS updated FROM sizes WHERE user_id = ? AND room_id = ?;")
 	if not diderror(stmt, db) then
 		stmt:bind_values(self:getID(), self:getChannelID())
 		stmt:step()
 		local size = stmt:get_value(0)
 		local updated = stmt:get_value(1)
-		local flags = stmt:get_value(2)
 		stmt:finalize()
-		return size, updated, flags
+		return size, updated
 	end
 end
 
 function twitch.user:updateSize()
-	local size, updated, flags = self:getSize()
+	local changed = false
+	local size, updated = self:getSize()
 
 	if not size or updated + CHANNEL_CONFIGS[self:getChannelID()]["size_cooldown"] < os.time() then
 		size = self:randomSize()
+		updated = os.time()
 
 		local stmt = db:prepare("UPDATE sizes SET size = ?, updated = CURRENT_TIMESTAMP WHERE user_id = ? AND room_id = ?;")
 		if diderror(stmt, db) then return false end
 		stmt:bind_values(size, self:getID(), self:getChannelID())
 		stmt:step()
 		stmt:finalize()
+		changed = true
 	end
 
-	return size, updated, flags
+	return changed, size, updated
 end
 
 function twitch.user:randomSize()
@@ -365,7 +377,7 @@ local crc16 = require("crc16")
 
 twitch.command.add("advert", function(user, cmd, args, raw)
 
-	if not user:isBroadcaster() then return end
+	if user:getUserName() ~= "bkacjios" and not user:isBroadcaster() then return end
 
 	if not args[1] then
 		user:message("{name}, the advert usage is %s <add, remove, list> [ID or message]", cmd, args[1])
@@ -434,19 +446,32 @@ twitch.command.add("advert", function(user, cmd, args, raw)
 	end
 end)
 
-twitch.command.add("donger", function(user, cmd, args, raw)
+twitch.command.add("size", function(user, cmd, args, raw)
 	if user:update() then
 		local king_size = twitch.getBiggestSize(user:getChannelID())
-		local size, flags = user:updateSize()
+		local changed, size, updated = user:updateSize()
+		local room_id = user:getChannelID()
+
+		local remain = updated + CHANNEL_CONFIGS[room_id]["size_cooldown"] - os.time()
+
+		user.size_updated = updated
+		user.size_remain = remain
+		user.size_length = size
+
+		local message
 
 		if not king_size or size >= king_size then
-			user:message(CHANNEL_CONFIGS[user["room-id"]]["size_format_king"]:gsub("%{size%-length%}", size))
+			message = CHANNEL_CONFIGS[room_id]["size_format_king"]:gsub("%{size%-length%}", size)
 		else
-			user:message(CHANNEL_CONFIGS[user["room-id"]]["size_format"]:gsub("%{size%-length%}", size))
+			message = CHANNEL_CONFIGS[room_id]["size_format"]:gsub("%{size%-length%}", size)
 		end
 
-		if not user:isBanable() and size <= CHANNEL_CONFIGS[user["room-id"]]["size_ban_min"] then
-			user:message(CHANNEL_CONFIGS[user["room-id"]]["size_format_ban"]:gsub("%{size%-length%}", size))
+		message = message:gsub("%{size%-remaining%}", math.SecondsToHuman(remain))
+
+		user:message(message)
+
+		if changed and user:isBanable() and size <= CHANNEL_CONFIGS[room_id]["size_ban_min"] then
+			user:message(CHANNEL_CONFIGS[room_id]["size_format_ban"]:gsub("%{size%-length%}", size))
 			user:message("/timeout {username} {size-ban-length}")
 		end
 	end
@@ -474,19 +499,26 @@ twitch.command.add("pleb", function(user, cmd, args, raw)
 	if not size then
 		user:message("There is currently no {size-name} {size-pleb}..")
 	elseif #users > 1 then
-		user:message("%s are the current {size-name} {size-pleb} with a %.1f inch {size-name}", list, size)
+		user:message("%s are the current {size-name} {size-pleb} with a %.1f {size-units} {size-name}", list, size)
 	else
-		user:message("%s is the current {size-name} {size-pleb} with a %.1f inch {size-name}", list, size)
+		user:message("%s is the current {size-name} {size-pleb} with a %.1f {size-units} {size-name}", list, size)
 	end
 end)
 
-twitch.command.add("dongs", function(user, cmd, args, raw)
+twitch.command.add("sizes", function(user, cmd, args, raw)
 	local users, total = twitch.getTotalSizes(user:getChannelID())
-	user:message("The collective total of %i {size-name}s is %.1f inches", users, total)
+	user:message("The collective total of %i {size-name}s is %.1f {size-units}", users, total)
 end)
 
 twitch.command.add("math", function(user, cmd, args, raw)
-	local stack, err = math.postfix(raw:sub(#cmd+2))
+
+	local equation = raw:sub(#cmd+2)
+
+	if not equation or #equation <= 0 then
+		return
+	end
+
+	local stack, err = math.postfix(equation)
 
 	if not stack then
 		user:message("/me {name}, error: %s", err)
@@ -563,6 +595,8 @@ local rank_translation = {
 	["moderator"] = FLAGS.IS_MODERATOR,
 	["sub"] = FLAGS.IS_SUBSCRIBER,
 	["subsciber"] = FLAGS.IS_SUBSCRIBER,
+	["admin"] = FLAGS.IS_ADMIN,
+	["staff"] = FLAGS.IS_STAFF,
 }
 
 twitch.command.add("average", function(user, cmd, args, raw)
@@ -575,8 +609,8 @@ twitch.command.add("average", function(user, cmd, args, raw)
 
 	local flag = rank_translation[rank]
 
-	local users, average = twitch.getAverageSizes(flag)
-	user:message("The average snorf size of %d %s is %.1f inches", users, string.Plural(rank, users), average)
+	local users, average = twitch.getAverageSizes(user:getChannelID(), flag)
+	user:message("The average {size-name} size of %d %s is %.1f {size-units}", users, string.Plural(rank, users), average)
 end)
 
 twitch.command.add("uptime", function(user, cmd, args, raw)
@@ -595,10 +629,16 @@ end)
 twitch.command.add("commands", function(user, cmd, args, raw)
 	local cmds = {}
 
+	local room_id = user:getChannelID()
+
 	for name, cmd in pairs(twitch.command.commands) do
-		if not cmd.alias and cmd.name ~= "lua" then
+		if not cmd.alias and cmd.name ~= "lua" and cmd.name ~= "size" and cmd.name ~= "sizes" then
 			table.insert(cmds, "!" .. name)
 		end
+	end
+
+	for name, cmd in pairs(twitch.command.room_commands[room_id]) do
+		table.insert(cmds, "!" .. name)
 	end
 
 	user:message("/me The commands available to DongerAI are: %s", table.concatList(cmds))
@@ -620,27 +660,15 @@ twitch.command.alias("following", "followage")
 local allowed_lua = {
 	["aiarena"] = true,
 	["bkacjios"] = true,
-	["super_noodle"] = true,
+	["otindustries"] = true,
 }
 
 twitch.command.add("lua", function(user, cmd, args, raw)
-	if allowed_lua[user:getUserName()] then
+	local username = user:getUserName()
+	if username == "bkacjios" or (user:isBroadcaster() and allowed_lua[username]) then
 		lua.run(user, raw:sub(6))
 	end
 end)
-
-local adverts = {
-	["super_noodle"] = {
-		"/me Check out the Stream group: http://steamcommunity.com/groups/SuperNoodleGroup",
-		"/me Check out the Discord: https://discord.gg/6GzcwWH",
-		"/me {host} has been streaming for {uptime}",
-	},
-}
-
-local current_advert = {}
-
-local next_advert = os.time() + 15 * 60
-local advert = 1
 
 local function main()
 	if twitch.chat.think then
@@ -672,6 +700,8 @@ local function main()
 		end
 	end
 end
+
+twitch.start()
 
 terminal.new(main, concommand.loop)
 terminal.loop()

@@ -4,6 +4,8 @@ local log = require("log")
 local twitch = require("twitch")
 
 local env = {
+	json = require("json"),
+	crc16 = require("crc16"),
 	assert = assert,
 	error = error,
 	ipairs = ipairs,
@@ -86,7 +88,7 @@ env.__newindex = env
 
 local function sandbox(user, func, buffer)
 	local getPlayer = function(name)
-		for username,user in pairs(twitch.users[user.channel]) do
+		for username,user in pairs(twitch.users["#" .. user.channel]) do
 			if user:getName() == name or user:getUserName() == name then
 				return user
 			end
@@ -100,14 +102,14 @@ local function sandbox(user, func, buffer)
 	setfenv(func, setmetatable({
 		print = function(...)
 			local txts = {}
-			for k,v in pairs({...}) do
+			for k,v in ipairs({...}) do
 				table.insert(txts, v == nil and "nil" or tostring(v))
 			end
 			table.insert(buffer, table.concat(txts, ", "))
 		end,
 		me = user,
 		twitch = twitch,
-		users = twitch.users[user.channel],
+		users = twitch.users["#" .. user.channel],
 		channel = user:getChannel(),
 	}, env))
 end
