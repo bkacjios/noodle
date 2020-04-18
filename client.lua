@@ -365,12 +365,18 @@ function twitch.user:randomSize()
 	return math.round(math.randombias(config["size_min"], config["size_max"], average, 0.5), config["size_round_places"])
 end
 
-concommand.Add("say", function(cmd, args, raw)
+concommand.add("say", function(cmd, args, raw)
 	twitch.message(args[1], args[2])
 end)
 
-concommand.Add("lel", function(cmd, args, raw)
+concommand.add("lel", function(cmd, args, raw)
 	twitch.message(args[1], args[2]:gsub(".", function(a) return a .. "\n" end))
+end)
+
+concommand.add("spam", function(cmd, args, raw)
+	for i=1,100 do
+		twitch.message(args[1], args[2])
+	end
 end)
 
 local crc16 = require("crc16")
@@ -449,6 +455,7 @@ end)
 twitch.command.add("size", function(user, cmd, args, raw)
 	if user:update() then
 		local king_size = twitch.getBiggestSize(user:getChannelID())
+		local pleb_size = twitch.getSmallestSize(user:getChannelID())
 		local changed, size, updated = user:updateSize()
 		local room_id = user:getChannelID()
 
@@ -462,6 +469,8 @@ twitch.command.add("size", function(user, cmd, args, raw)
 
 		if not king_size or size >= king_size then
 			message = CHANNEL_CONFIGS[room_id]["size_format_king"]:gsub("%{size%-length%}", size)
+		elseif pleb_size and size <= pleb_size then
+			message = CHANNEL_CONFIGS[room_id]["size_format_pleb"]:gsub("%{size%-length%}", size)
 		else
 			message = CHANNEL_CONFIGS[room_id]["size_format"]:gsub("%{size%-length%}", size)
 		end
@@ -672,7 +681,7 @@ end)
 
 local function main()
 	if twitch.chat.think then
-		local succ, err = pcall(twitch.chat.think, twitch.chat)
+		local succ, err = xpcall(twitch.chat.think, debug.traceback, twitch.chat)
 		if not succ then
 			log.warn("twitch chat error: %s", err)
 		end
@@ -688,7 +697,8 @@ local function main()
 
 			local key, message = next(CHANNEL_ADVERTS[room_id], ADVERT_NEXT[room_id])
 
-			if not key then -- End of the table? Try again at the start
+			if not key then
+				-- End of the table? Try again at the start
 				ADVERT_NEXT[room_id] = nil
 				key, message = next(CHANNEL_ADVERTS[room_id], ADVERT_NEXT[room_id])
 			end

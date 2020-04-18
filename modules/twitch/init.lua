@@ -153,7 +153,7 @@ function twitch.https(url, ...)
 		url = url:format(...),
 		sink = ltn12.sink.table(t),
 		headers = {
-			["Client-ID"] = "p59zoqvt4joe9gqzqbs5cycbhc3nr6",
+			["Client-ID"] = "jzkbprff40iqj646a697cyrvl0zt2m6",
 		},
 	})
 
@@ -313,6 +313,13 @@ function twitch.setHooks()
 
 			local user = createUserTable(tags, hostmask, target)
 			twitch.users[target][user["user-name"]] = user
+
+			local low = message:lower()
+
+			if (low:find("n1ger") or low:find("n1gger") or low:find("n1g3r") or low:find("n1gg3r") or low:find("niger") or low:find("nigger")) then
+				twitch.message(user.channel, "/ban %s", user["user-name"])
+				twitch.message(user.channel, "%s is a massive edgelord LUL SEE YA NERD.", user["user-name"])
+			end
 
 			twitch.command.poll(user, message)
 		elseif mode == "WHISPER" then

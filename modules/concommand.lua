@@ -8,7 +8,7 @@ require("extensions.math")
 require("extensions.string")
 require("extensions.table")
 
-function concommand.Add(name, cb, help)
+function concommand.add(name, cb, help)
 	concommand.commands[name] = {
 		name = name,
 		callback = cb,
@@ -16,7 +16,7 @@ function concommand.Add(name, cb, help)
 	}
 end
 
-function concommand.Alias(name, alias)
+function concommand.alias(name, alias)
 	local original = concommand.commands[name]
 	concommand.commands[alias] = {
 		name = name,
@@ -25,7 +25,7 @@ function concommand.Alias(name, alias)
 	}
 end
 
-concommand.Add("help", function(cmd, args)
+concommand.add("help", function(cmd, args)
 	print("Command List")
 	for name, cmd in pairs(concommand.commands) do
 		if name == cmd.name then
@@ -33,13 +33,13 @@ concommand.Add("help", function(cmd, args)
 		end
 	end
 end, "Display a list of all commands")
-concommand.Alias("help", "commands")
+concommand.alias("help", "commands")
 
-concommand.Add("exit", function(cmd, args)
+concommand.add("exit", function(cmd, args)
 	os.exit()
 end, "Close the program")
-concommand.Alias("exit", "quit")
-concommand.Alias("exit", "quti")
+concommand.alias("exit", "quit")
+concommand.alias("exit", "quti")
 
 function concommand.loop()
 	local msg = io.read()
@@ -49,10 +49,8 @@ function concommand.loop()
 	if not cmd then return end
 	local info = concommand.commands[cmd:lower()]
 	if info then
-		local suc, err = pcall(info.callback, cmd, args, msg)
-		if not suc then
-			log.error("%s (%q)", msg, err)
-		end
+		local suc, err = xpcall(info.callback, debug.traceback, cmd, args, msg)
+		if not suc then log.error("%s (%q)", msg, err) end
 	else
 		print(("Unknown command: %s"):format(cmd))
 	end

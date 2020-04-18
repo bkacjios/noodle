@@ -10,6 +10,17 @@ function math.factorial(n)
 	return n
 end
 
+function math.average(...)
+	local nums = {...}
+	local sum = 0
+
+	for i=1, #nums do
+		sum = sum + nums[i]
+	end
+
+	return sum / #nums
+end
+
 local operators = {
 	[">"] = {
 		precedence = 6,
@@ -113,6 +124,12 @@ local operators = {
 		method = function(a) return -a end,
 		args = 1,
 	},
+	["×"] = {
+		precedence = 3,
+		associativity = "left",
+		method = function(a, b) return a * b end,
+		args = 2,
+	},
 	["x"] = {
 		precedence = 3,
 		associativity = "left",
@@ -174,6 +191,7 @@ local functions = {
 	["asin"] = {method = math.asin},
 	["atan"] = {method = math.atan},
 	["atan2"] = {multi = true, method = math.atan2},
+	["avg"] = {multi = true, method = math.average},
 	["ceil"] = {multi = true, method = math.ceil},
 	["cos"] = {method = math.cos},
 	["cosh"] = {method = math.cosh},
@@ -311,7 +329,7 @@ function math.postfix(str)
 			if not functions[stack[#stack-1]] then
 				return false, ("misuse of ',' outside of funciton scope near '%s'"):format(prev_token)
 			elseif not functions[stack[#stack-1]].multi then
-				return false, ("unexpected ',' in function '%s'"):format(stack[#stack-1])
+				return false, ("unexpected ',' in single argument function '%s'"):format(stack[#stack-1])
 			end
 			args[#stack-1] = args[#stack-1] + 1
 		elseif token == "(" then
@@ -441,7 +459,7 @@ local function needParensOnLeft(node)
 end
 
 local function needParensOnRight(node)
-	if node.right.kind == "number" or node.right.kind == "unary" or node.right.kind == "function" then
+	if node.right.kind == "number" or node.right.kind == "function" then
 		return false
 	end
 	if node.operator == "+" or node.operator == "*" then
@@ -485,7 +503,7 @@ end
 function math.infix_to_string(node, infunc)
 	if not node then return "" end
 	if node.kind == "number" then
-		return node.value
+		return tostring(node.value)
 	elseif node.kind == "function" then
 		local str = node.func .. '('
 		for k,arg in pairs(node.args) do
@@ -507,13 +525,18 @@ function math.infix_to_string(node, infunc)
 			else
 				val = math.infix_to_string(node.node) .. node.operator
 			end
+			if infunc then
+				return val
+			end
+			return '(' .. val .. ')'
 		else
-			val = node.operator .. math.infix_to_string(node.node)
-		end
-		if infunc then
+			if node.node.kind == "number" then
+				val = node.operator .. math.infix_to_string(node.node)
+			else
+				val = node.operator .. '(' .. math.infix_to_string(node.node) .. ')'
+			end
 			return val
 		end
-		return '(' .. val .. ')'
 	end
 	local lhs = math.infix_to_string(node.left)
 	if needParensOnLeft(node) then
@@ -579,6 +602,8 @@ local expression = "min(-3, max(-2,-1,0,1,2)) + sin 1"
 local expression = "1 + 1 - 1 - 1 * 2 - 3 ^ 4 / 5 / 2 * 2 + 6 - 7"
 local expression = "(6-1)! + 0! + -1/5^2"
 local expression = "6-1x0+2÷2+π"
+local expression = "220 / 6 + 30 + "
+local expression = -(6+2*2/3)
 
 local stack, err = math.postfix(expression)
 
